@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 from aiogram import Bot, Dispatcher, executor
@@ -6,6 +7,7 @@ from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters import CommandStart, Text, CommandHelp
 from aiogram.types import Message, CallbackQuery
+from aiogram.utils.exceptions import WrongFileIdentifier, InvalidHTTPUrlContent
 
 from database.database_module import Base, engine
 from dictionaries import validate_district, district_dict, get_key_by_value
@@ -146,13 +148,21 @@ async def district_text(message: Message, state: FSMContext) -> None:
             await message.answer("По вашему запросу ничего не найдено, хотите продолжить поиск?",
                                  reply_markup=get_continue_keyboard())
         else:
-            for flat in flat_list:
-                await bot.send_photo(chat_id=message.chat.id, photo=flat.image_url, caption=str(flat))
-            user_request_model.district = get_key_by_value(district_dict, user_request_model.district)
-            create_history_request(str(user_request_model), message.from_user.id)
-            await FindFlatState.next()
-            await message.answer("Хотите продолжить поиск?",
-                                 reply_markup=get_continue_keyboard())
+            try:
+                for flat in flat_list:
+                    try:
+                        await bot.send_photo(chat_id=message.chat.id, photo=flat.image_url, caption=str(flat))
+                    except (WrongFileIdentifier ,InvalidHTTPUrlContent):
+                        await bot.send_message(chat_id=message.chat.id, text=str(flat))
+                    await asyncio.sleep(0.3)
+            except Exception as ex:
+                logging.error(ex)
+            finally:
+                user_request_model.district = get_key_by_value(district_dict, user_request_model.district)
+                create_history_request(str(user_request_model), message.from_user.id)
+                await FindFlatState.next()
+                await message.answer("Хотите продолжить поиск?",
+                                     reply_markup=get_continue_keyboard())
 
 
 @dp.message_handler(state="*")
